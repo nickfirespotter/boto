@@ -70,7 +70,8 @@ class ResourceRecordSets(ResultSet):
     def add_change(self, action, name, type, ttl=600,
                    alias_hosted_zone_id=None, alias_dns_name=None, identifier=None,
                    weight=None, region=None, alias_evaluate_target_health=None,
-                   health_check=None, failover=None):
+                   health_check=None, failover=None, continent_code=None, country_code=None,
+                   sub_division_code=None):
         """
         Add a change request to the set.
 
@@ -135,13 +136,37 @@ class ResourceRecordSets(ResultSet):
         :type failover: str
         :param failover: *Failover resource record sets only* Whether this is the
             primary or secondary resource record set.
+
+        :type continent_code: str
+        :param continent_code: *GeoLocation resource record sets only* When you want to
+             route all of the DNS queries from a specified continent to the same
+             resource, use ContinentCode to specify the continent. If you include a
+             ContinentCode element, omit CountryCode and SubdivisionCode elements.
+
+        :type country_code: str
+        :param country_code: *GeoLocation resource record sets only* When you want to
+            route all of the DNS queries from a specified country to the same resource,
+            use CountryCode to identify the country. If you include a CountryCode
+            element, omit the ContinentCode element. If you want to route queries for a
+            state in the United States, also include a SubdivisionCode element.
+            Subdivisions for other countries are not supported.
+
+        :type sub_division_code: str
+        :param sub_division_code: *GeoLocation resource record sets only* When you want
+            to route all of the DNS queries from a specified state in the United States
+            to the same resource, use SubdivisionCode to specify the state. Amazon Route
+            53 doesn't support subdivisions for other countries. If you include a
+            SubdivisionCode element, you must also include a CountryCode element with a
+            value of US. Omit the ContinentCode element.
         """
         change = Record(name, type, ttl,
                         alias_hosted_zone_id=alias_hosted_zone_id,
                         alias_dns_name=alias_dns_name, identifier=identifier,
                         weight=weight, region=region,
                         alias_evaluate_target_health=alias_evaluate_target_health,
-                        health_check=health_check, failover=failover)
+                        health_check=health_check, failover=failover,
+                        continent_code=continent_code, country_code=country_code,
+                        sub_division_code=sub_division_code)
         self.changes.append([action, change])
         return change
 
@@ -224,6 +249,27 @@ class Record(object):
         <Failover>%(failover)s</Failover>
     """
 
+    GeoLocationContinentBody = """
+        <SetIdentifier>%(identifier)s</SetIdentifier>
+        <GeoLocation>
+            <ContinentCode>%(continent_code)s</ContinentCode>
+        </GeoLocation>
+    """
+
+    GeoLocationCountryBody = """
+        <SetIdentifier>%(identifier)s</SetIdentifier>
+        <GeoLocation>
+            <CountryCode>%(country_code)s</CountryCode>
+        </GeoLocation>
+    """
+
+    GeoLocationSubDivisionBody = """
+        <SetIdentifier>%(identifier)s</SetIdentifier>
+        <GeoLocation>
+            <SubDivisionCode>%(sub_division_code)s</SubDivisionCode>
+        </GeoLocation>
+    """
+
     ResourceRecordsBody = """
         <TTL>%(ttl)s</TTL>
         <ResourceRecords>
@@ -245,7 +291,8 @@ class Record(object):
     def __init__(self, name=None, type=None, ttl=600, resource_records=None,
                  alias_hosted_zone_id=None, alias_dns_name=None, identifier=None,
                  weight=None, region=None, alias_evaluate_target_health=None,
-                 health_check=None, failover=None):
+                 health_check=None, failover=None, continent_code=None, country_code=None,
+                 sub_division_code=None):
         self.name = name
         self.type = type
         self.ttl = ttl
@@ -260,6 +307,9 @@ class Record(object):
         self.alias_evaluate_target_health = alias_evaluate_target_health
         self.health_check = health_check
         self.failover = failover
+        self.continent_code = continent_code
+        self.country_code = country_code
+        self.sub_division_code = sub_division_code
 
     def __repr__(self):
         return '<Record:%s:%s:%s>' % (self.name, self.type, self.to_print())
@@ -310,6 +360,15 @@ class Record(object):
         elif self.identifier is not None and self.failover is not None:
             weight = self.FailoverBody % {"identifier": self.identifier,
                                           "failover": self.failover}
+        elif self.identifier is not None and self.continent_code is not None:
+          weight = self.GeoLocationContinentBody % {"identifier": self.identifier,
+                                                    "continent_code": self.continent_code}
+        elif self.identifier is not None and self.country_code is not None:
+          weight = self.GeoLocationCountryBody % {"identifier": self.identifier,
+                                                  "country_code": self.country_code}
+        elif self.identifier is not None and self.sub_division_code is not None:
+          weight = self.GeoLocationSubDivisionBody % {"identifier": self.identifier,
+                                                      "sub_division_code": self.sub_division_code}
 
         health_check = ""
         if self.health_check is not None:
@@ -341,6 +400,13 @@ class Record(object):
             rr += ' (LBR id=%s, region=%s)' % (self.identifier, self.region)
         elif self.identifier is not None and self.failover is not None:
             rr += ' (FAILOVER id=%s, failover=%s)' % (self.identifier, self.failover)
+        elif self.identifier is not None and self.continent_code is not None:
+            rr += ' (GEOLOCATION id=%s, continent_code=%s' % (self.identifier, self.continent_code)
+        elif self.identifier is not None and self.country_code is not None:
+            rr += ' (GEOLOCATION id=%s, country_code=%s' % (self.identifier, self.country_code)
+        elif self.identifier is not None and self.sub_division_code is not None:
+            rr += ' (GEOLOCATION id=%s, sub_division_code=%s' % (self.identifier,
+                                                                 self.sub_division_code)
 
         return rr
 
@@ -369,6 +435,12 @@ class Record(object):
             self.failover = value
         elif name == 'HealthCheckId':
             self.health_check = value
+        elif name == 'ContinentCode':
+            self.continent_code = value
+        elif name == 'CountryCode':
+            self.country_code = value
+        elif name == 'SubDivisionCode':
+            self.sub_division_code = value
 
     def startElement(self, name, attrs, connection):
         return None
